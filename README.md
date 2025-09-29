@@ -1,13 +1,25 @@
-# Complete YouTube Script: Kubernetes CI/CD Pipeline Using Jenkins for MERN Stack Beginners
-We're building a complete CI/CD pipeline using Jenkins and Kubernetes that will automate everything from code commit to live deployment. And I'm going to show you every single step, even if you're a complete beginner.
+# MERN Stack Kubernetes CI/CD Pipeline with Jenkins
 
-**[What We'll Cover]**
-"Here's exactly what we'll build together:
+**Created by: Hari Krishna**  
+**Repository: [MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins](https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins)**
+
+## Complete CI/CD Pipeline for MERN Stack Applications
+
+This project demonstrates a complete CI/CD pipeline using Jenkins and Kubernetes that automates everything from code commit to live deployment for MERN stack applications.
+
+**[What This Project Covers]**
+"Here's exactly what this project includes:
 - Complete MERN stack application setup
 - Jenkins pipeline configuration
 - Docker containerization
 - Kubernetes deployment
 - Automatic deployments on code changes
+
+## Project Features
+- **Automated Testing**: Every code push triggers automated builds and tests
+- **Container Orchestration**: Full Docker containerization with Kubernetes deployment
+- **Production Ready**: Complete CI/CD pipeline suitable for production environments
+- **Scalable Architecture**: Kubernetes-based deployment for easy scaling
 
 ### What is CI/CD?
 "Before we jump into coding, let's understand what CI/CD actually means:
@@ -113,7 +125,7 @@ EOF
 
 echo "Kubeconfig created: jenkins-kubeconfig.yaml"
 
-## STEP 3: Create Your MERN Application[Checkout my git repo:https://github.com/CodeEaseWithAnu/CI-CD-Jenkins-Pipeline]
+## STEP 3: Create Your MERN Application[Checkout my git repo:https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins]
 
 ### Project Structure
 
@@ -221,7 +233,7 @@ git add .
 git commit -m "Initial MERN K8s CI/CD setup"
 
 # Add your GitHub repo (create one first!)
-git remote add origin https://github.com/your-username/mern-k8s-app.git
+git remote add origin https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git
 git branch -M main
 git push -u origin main
 ```
@@ -231,12 +243,12 @@ Before running the pipeline, update these files with your actual values:
 
 In `Jenkinsfile`, change:
 ```groovy
-DOCKER_REGISTRY = 'your-dockerhub-username'  // Your actual Docker Hub username
+DOCKER_REGISTRY = 'hariikr'  // Your actual Docker Hub username
 ```
 
 In `k8s/backend-deployment.yaml` and `k8s/frontend-deployment.yaml`, change:
 ```yaml
-image: your-username/mern-backend:latest  # Your actual Docker Hub username
+image: hariikr/mern-backend:latest  # Your actual Docker Hub username
 ```
 
 ### 3. Trigger Your First Build
