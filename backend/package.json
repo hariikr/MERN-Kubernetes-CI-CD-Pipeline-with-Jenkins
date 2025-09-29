@@ -12,9 +12,9 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-     "test": "echo \"No backend tests implemented yet.\"", 
-    "start":"node server.js",
-    "dev":"node server.js"
+    "test": "echo \"No backend tests implemented yet.\"",
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",
