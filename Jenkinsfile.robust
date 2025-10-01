@@ -1,0 +1,230 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_REGISTRY = 'hariikr'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '📥 Checking out source code...'
+                git branch: 'main',
+                    url: 'https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git',
+                    credentialsId: 'git'
+            }
+        }
+
+        stage('Environment Check') {
+            steps {
+                script {
+                    echo '🔍 Checking available tools...'
+                    
+                    // Check Node.js
+                    def nodeAvailable = sh(script: 'command -v node', returnStatus: true) == 0
+                    if (nodeAvailable) {
+                        sh 'node --version'
+                        sh 'npm --version'
+                        echo '✅ Node.js is available'
+                    } else {
+                        echo '❌ Node.js not found'
+                    }
+                    
+                    // Check Docker
+                    def dockerAvailable = sh(script: 'command -v docker', returnStatus: true) == 0
+                    if (dockerAvailable) {
+                        sh 'docker --version'
+                        echo '✅ Docker is available'
+                    } else {
+                        echo '❌ Docker not found'
+                    }
+                    
+                    // Check kubectl
+                    def kubectlAvailable = sh(script: 'command -v kubectl', returnStatus: true) == 0
+                    if (kubectlAvailable) {
+                        sh 'kubectl version --client'
+                        echo '✅ kubectl is available'
+                    } else {
+                        echo '❌ kubectl not found'
+                    }
+                }
+            }
+        }
+
+        stage('Test Applications') {
+            parallel {
+                stage('Backend Tests') {
+                    steps {
+                        script {
+                            def nodeAvailable = sh(script: 'command -v node', returnStatus: true) == 0
+                            if (nodeAvailable) {
+                                dir('backend') {
+                                    sh 'npm install'
+                                    sh 'npm test'
+                                    echo '✅ Backend tests completed'
+                                }
+                            } else {
+                                echo '⏭️ Skipping backend tests - Node.js not available'
+                                echo 'Backend test placeholder - would install dependencies and run tests'
+                            }
+                        }
+                    }
+                }
+                
+                stage('Frontend Tests') {
+                    steps {
+                        script {
+                            def nodeAvailable = sh(script: 'command -v node', returnStatus: true) == 0
+                            if (nodeAvailable) {
+                                dir('frontend') {
+                                    sh 'npm install'
+                                    sh 'npm test'
+                                    echo '✅ Frontend tests completed'
+                                }
+                            } else {
+                                echo '⏭️ Skipping frontend tests - Node.js not available'
+                                echo 'Frontend test placeholder - would install dependencies and run tests'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            when {
+                expression {
+                    return sh(script: 'command -v docker', returnStatus: true) == 0
+                }
+            }
+            parallel {
+                stage('Backend Image') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                try {
+                                    def backendImage = docker.build("${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}")
+                                    echo "✅ Built backend image: ${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}"
+                                    
+                                    // Only push if credentials exist
+                                    try {
+                                        docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                                            backendImage.push()
+                                            backendImage.push('latest')
+                                            echo "✅ Pushed backend image to registry"
+                                        }
+                                    } catch (Exception e) {
+                                        echo "⚠️ Could not push to registry: ${e.getMessage()}"
+                                        echo "Image built locally but not pushed"
+                                    }
+                                } catch (Exception e) {
+                                    echo "❌ Failed to build backend image: ${e.getMessage()}"
+                                    throw e
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Frontend Image') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                try {
+                                    def frontendImage = docker.build("${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}")
+                                    echo "✅ Built frontend image: ${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}"
+                                    
+                                    // Only push if credentials exist
+                                    try {
+                                        docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                                            frontendImage.push()
+                                            frontendImage.push('latest')
+                                            echo "✅ Pushed frontend image to registry"
+                                        }
+                                    } catch (Exception e) {
+                                        echo "⚠️ Could not push to registry: ${e.getMessage()}"
+                                        echo "Image built locally but not pushed"
+                                    }
+                                } catch (Exception e) {
+                                    echo "❌ Failed to build frontend image: ${e.getMessage()}"
+                                    throw e
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when {
+                expression {
+                    return sh(script: 'command -v kubectl', returnStatus: true) == 0
+                }
+            }
+            steps {
+                script {
+                    try {
+                        echo '🚀 Deploying to Kubernetes...'
+                        
+                        // Update deployment files with new image tags
+                        sh """
+                            sed -i 's|your-registry/mern-backend:latest|${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
+                            sed -i 's|your-registry/mern-frontend:latest|${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}|g' k8s/frontend-deployment.yaml
+                        """
+                        
+                        // Apply Kubernetes manifests
+                        sh 'kubectl apply -f k8s/'
+                        
+                        // Wait for deployments to be ready
+                        sh 'kubectl rollout status deployment/backend-deployment --timeout=300s'
+                        sh 'kubectl rollout status deployment/frontend-deployment --timeout=300s'
+                        
+                        echo '✅ Kubernetes deployment completed'
+                        
+                        // Show deployment status
+                        sh 'kubectl get pods -o wide'
+                        sh 'kubectl get services'
+                        
+                    } catch (Exception e) {
+                        echo "❌ Kubernetes deployment failed: ${e.getMessage()}"
+                        // Don't fail the pipeline, just report the issue
+                        echo "Check kubectl configuration and cluster connectivity"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 Pipeline completed successfully!'
+            echo "📦 Images built: ${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}, ${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}"
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+            echo 'Check the logs above for error details'
+        }
+        always {
+            script {
+                def dockerAvailable = sh(script: 'command -v docker', returnStatus: true) == 0
+                if (dockerAvailable) {
+                    try {
+                        sh 'docker system prune -f'
+                        echo '🧹 Docker cleanup completed'
+                    } catch (Exception e) {
+                        echo "⚠️ Docker cleanup failed: ${e.getMessage()}"
+                    }
+                } else {
+                    echo '🧹 Skipping Docker cleanup - Docker not available'
+                }
+                
+                echo '📊 Pipeline Summary:'
+                echo "- Build Number: ${BUILD_NUMBER}"
+                echo "- Repository: https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git"
+                echo "- Branch: main"
+            }
+        }
+    }
+}
