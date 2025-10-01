@@ -1,10 +1,15 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'docker:24.0.5-cli' // Docker CLI image
+            args '-v /var/run/docker.sock:/var/run/docker.sock' // Give access to host Docker
+        }
+    }
 
     environment {
         DOCKER_REGISTRY = 'hariikr'
         IMAGE_TAG = "${BUILD_NUMBER}"
-        KUBERNETES_SERVER = 'https://kubernetes.default.svc'  
+        KUBERNETES_SERVER = 'https://kubernetes.default.svc'
     }
 
     stages {
@@ -19,8 +24,11 @@ pipeline {
         stage('Install Dependencies & Test Backend') {
             steps {
                 dir('backend') {
-                    sh 'npm install'
-                    sh 'npm test'
+                    sh '''
+                        apk add --no-cache nodejs npm
+                        npm install
+                        npm test
+                    '''
                 }
             }
         }
@@ -28,8 +36,11 @@ pipeline {
         stage('Install Dependencies & Test Frontend') {
             steps {
                 dir('frontend') {
-                    sh 'npm install'
-                    sh 'npm test -- --coverage --watchAll=false'
+                    sh '''
+                        apk add --no-cache nodejs npm
+                        npm install
+                        npm test -- --coverage --watchAll=false
+                    '''
                 }
             }
         }
@@ -49,6 +60,7 @@ pipeline {
                         }
                     }
                 }
+
                 stage('Frontend Image') {
                     steps {
                         script {
@@ -81,10 +93,10 @@ pipeline {
                     sh """
                         sed -i 's|your-registry/mern-backend:latest|${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
                         sed -i 's|your-registry/mern-frontend:latest|${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}|g' k8s/frontend-deployment.yaml
+                        kubectl apply -f k8s/
+                        kubectl rollout status deployment/backend-deployment
+                        kubectl rollout status deployment/frontend-deployment
                     """
-                    sh 'kubectl apply -f k8s/'
-                    sh 'kubectl rollout status deployment/backend-deployment'
-                    sh 'kubectl rollout status deployment/frontend-deployment'
                 }
             }
         }
