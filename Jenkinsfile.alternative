@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-alpine'
-            args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
-        }
-    }
+    agent none
 
     environment {
         DOCKER_REGISTRY = 'hariikr'
@@ -13,62 +8,63 @@ pipeline {
     }
 
     stages {
-        stage('Setup Environment') {
-            steps {
-                sh '''
-                    # Install Docker
-                    apk add --no-cache docker-cli
-                    
-                    # Install kubectl
-                    apk add --no-cache curl
-                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                    chmod +x kubectl
-                    mv kubectl /usr/local/bin/
-                    
-                    # Verify installations
-                    node --version
-                    npm --version
-                    docker --version
-                    kubectl version --client
-                '''
-            }
-        }
-
         stage('Checkout') {
+            agent any
             steps {
                 git branch: 'main',
                     url: 'https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git',
                     credentialsId: 'git'
+                stash includes: '**', name: 'source-code'
             }
         }
 
-        stage('Install Dependencies & Test Backend') {
-            steps {
-                dir('backend') {
-                    sh '''
-                        npm install
-                        npm test
-                    '''
+        stage('Test') {
+            parallel {
+                stage('Test Backend') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            reuseNode false
+                        }
+                    }
+                    steps {
+                        unstash 'source-code'
+                        dir('backend') {
+                            sh '''
+                                npm install
+                                npm test
+                            '''
+                        }
+                    }
                 }
-            }
-        }
 
-        stage('Install Dependencies & Test Frontend') {
-            steps {
-                dir('frontend') {
-                    sh '''
-                        npm install
-                        npm test
-                    '''
+                stage('Test Frontend') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            reuseNode false
+                        }
+                    }
+                    steps {
+                        unstash 'source-code'
+                        dir('frontend') {
+                            sh '''
+                                npm install
+                                npm test
+                            '''
+                        }
+                    }
                 }
             }
         }
 
         stage('Build & Push Docker Images') {
-            parallel {
-                stage('Backend Image') {
-                    steps {
-                        script {
+            agent any
+            steps {
+                unstash 'source-code'
+                script {
+                    parallel(
+                        "Backend Image": {
                             dir('backend') {
                                 def backendImage = docker.build("${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
@@ -76,13 +72,8 @@ pipeline {
                                     backendImage.push('latest')
                                 }
                             }
-                        }
-                    }
-                }
-
-                stage('Frontend Image') {
-                    steps {
-                        script {
+                        },
+                        "Frontend Image": {
                             dir('frontend') {
                                 def frontendImage = docker.build("${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
@@ -91,23 +82,15 @@ pipeline {
                                 }
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        stage('Verify Kubernetes Connectivity') {
-            steps {
-                script {
-                    echo '🔍 Verifying Kubernetes API (In-cluster ServiceAccount)...'
-                    sh 'kubectl cluster-info'
-                    sh 'kubectl get nodes -o wide'
+                    )
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
+            agent any
             steps {
+                unstash 'source-code'
                 script {
                     sh """
                         sed -i 's|your-registry/mern-backend:latest|${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
@@ -121,6 +104,7 @@ pipeline {
         }
 
         stage('Verify Deployment') {
+            agent any
             steps {
                 script {
                     sh 'kubectl get pods -o wide'
@@ -140,11 +124,13 @@ pipeline {
             echo '❌ Pipeline failed!' 
         }
         always { 
-            script {
-                try {
-                    sh 'docker system prune -f'
-                } catch (Exception e) {
-                    echo "Docker cleanup failed: ${e.getMessage()}"
+            node {
+                script {
+                    try {
+                        sh 'docker system prune -f'
+                    } catch (Exception e) {
+                        echo "Docker cleanup failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
