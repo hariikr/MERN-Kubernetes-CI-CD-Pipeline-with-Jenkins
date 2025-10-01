@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:24.0.5-cli' // Docker CLI image
-            args '-v /var/run/docker.sock:/var/run/docker.sock' // Give access to host Docker
-        }
-    }
+    agent any
 
     environment {
         DOCKER_REGISTRY = 'hariikr'
@@ -25,9 +20,14 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        apk add --no-cache nodejs npm
-                        npm install
-                        npm test
+                        # Check if npm is available
+                        if command -v npm &> /dev/null; then
+                            npm install
+                            npm test
+                        else
+                            echo "Node.js/npm not found. Please ensure Node.js is installed on Jenkins agent."
+                            exit 1
+                        fi
                     '''
                 }
             }
@@ -37,9 +37,14 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                        apk add --no-cache nodejs npm
-                        npm install
-                        npm test -- --coverage --watchAll=false
+                        # Check if npm is available
+                        if command -v npm &> /dev/null; then
+                            npm install
+                            npm test -- --coverage --watchAll=false
+                        else
+                            echo "Node.js/npm not found. Please ensure Node.js is installed on Jenkins agent."
+                            exit 1
+                        fi
                     '''
                 }
             }
@@ -50,6 +55,12 @@ pipeline {
                 stage('Backend Image') {
                     steps {
                         script {
+                            // Check if Docker is available
+                            def dockerAvailable = sh(script: 'command -v docker', returnStatus: true) == 0
+                            if (!dockerAvailable) {
+                                error "Docker is not available on this Jenkins agent. Please ensure Docker is installed and accessible."
+                            }
+                            
                             dir('backend') {
                                 def backendImage = docker.build("${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
@@ -64,6 +75,12 @@ pipeline {
                 stage('Frontend Image') {
                     steps {
                         script {
+                            // Check if Docker is available
+                            def dockerAvailable = sh(script: 'command -v docker', returnStatus: true) == 0
+                            if (!dockerAvailable) {
+                                error "Docker is not available on this Jenkins agent. Please ensure Docker is installed and accessible."
+                            }
+                            
                             dir('frontend') {
                                 def frontendImage = docker.build("${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
@@ -80,6 +97,12 @@ pipeline {
         stage('Verify Kubernetes Connectivity') {
             steps {
                 script {
+                    // Check if kubectl is available
+                    def kubectlAvailable = sh(script: 'command -v kubectl', returnStatus: true) == 0
+                    if (!kubectlAvailable) {
+                        error "kubectl is not available on this Jenkins agent. Please ensure kubectl is installed and configured."
+                    }
+                    
                     echo '🔍 Verifying Kubernetes API (In-cluster ServiceAccount)...'
                     sh 'kubectl cluster-info'
                     sh 'kubectl get nodes -o wide'
@@ -114,8 +137,20 @@ pipeline {
     }
 
     post {
-        success { echo '🎉 Pipeline completed successfully!' }
-        failure { echo '❌ Pipeline failed!' }
-        always { sh 'docker system prune -f' }
+        success { 
+            echo '🎉 Pipeline completed successfully!' 
+        }
+        failure { 
+            echo '❌ Pipeline failed!' 
+        }
+        always { 
+            script {
+                try {
+                    sh 'docker system prune -f'
+                } catch (Exception e) {
+                    echo "Docker cleanup failed: ${e.getMessage()}"
+                }
+            }
+        }
     }
 }
