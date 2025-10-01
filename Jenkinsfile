@@ -4,25 +4,19 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'hariikr'
         IMAGE_TAG = "${BUILD_NUMBER}"
-        KUBERNETES_SERVER = 'https://kubernetes.default.svc'
-    }
-
-    tools {
-        git 'Default'           // Make sure Git is configured in Jenkins global tools
-        nodejs 'NodeJS_20'      // NodeJS plugin installation in Jenkins
+        KUBERNETES_SERVER = 'https://kubernetes.default.svc'  
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Use actual GitHub credentials configured in Jenkins
                 git branch: 'main',
                     url: 'https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git',
-                    credentialsId: 'git' 
+                    credentialsId: 'git'
             }
         }
 
-        stage('Install & Test Backend') {
+        stage('Install Dependencies & Test Backend') {
             steps {
                 dir('backend') {
                     sh 'npm install'
@@ -31,7 +25,7 @@ pipeline {
             }
         }
 
-        stage('Install & Test Frontend') {
+        stage('Install Dependencies & Test Frontend') {
             steps {
                 dir('frontend') {
                     sh 'npm install'
@@ -44,8 +38,8 @@ pipeline {
             parallel {
                 stage('Backend Image') {
                     steps {
-                        dir('backend') {
-                            script {
+                        script {
+                            dir('backend') {
                                 def backendImage = docker.build("${DOCKER_REGISTRY}/mern-backend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
                                     backendImage.push()
@@ -57,8 +51,8 @@ pipeline {
                 }
                 stage('Frontend Image') {
                     steps {
-                        dir('frontend') {
-                            script {
+                        script {
+                            dir('frontend') {
                                 def frontendImage = docker.build("${DOCKER_REGISTRY}/mern-frontend:${IMAGE_TAG}")
                                 docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
                                     frontendImage.push()
@@ -74,7 +68,7 @@ pipeline {
         stage('Verify Kubernetes Connectivity') {
             steps {
                 script {
-                    echo '🔍 Verifying Kubernetes API...'
+                    echo '🔍 Verifying Kubernetes API (In-cluster ServiceAccount)...'
                     sh 'kubectl cluster-info'
                     sh 'kubectl get nodes -o wide'
                 }
@@ -110,15 +104,6 @@ pipeline {
     post {
         success { echo '🎉 Pipeline completed successfully!' }
         failure { echo '❌ Pipeline failed!' }
-        always {
-            script {
-                // Only run Docker cleanup if Docker is available
-                if (fileExists('/usr/bin/docker') || fileExists('/usr/local/bin/docker')) {
-                    sh 'docker system prune -f'
-                } else {
-                    echo '⚠️ Docker not found, skipping cleanup'
-                }
-            }
-        }
+        always { sh 'docker system prune -f' }
     }
 }
