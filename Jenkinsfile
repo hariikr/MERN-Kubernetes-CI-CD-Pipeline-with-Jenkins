@@ -11,8 +11,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'your-git-repository-url',
-                    credentialsId: 'github-credentials'
+                    url: 'https://github.com/hariikr/MERN-Kubernetes-CI-CD-Pipeline-with-Jenkins.git',
+                    credentialsId: 'git'
             }
         }
 
